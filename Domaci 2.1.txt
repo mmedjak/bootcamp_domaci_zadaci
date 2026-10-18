@@ -1,0 +1,92 @@
+-- 1. Dodajte kolonu empty_seats (kapacitet stadiona minus poseta) i prikažite 5 utakmica sa najviše praznih mesta. Šta je zajedničko prvim trima?
+
+SELECT 
+    stadium_name, home_team, away_team, season,
+    stadium_capacity, attendance,
+    stadium_capacity - attendance AS empty_seats
+FROM bootcamp.northern_star.matches_flat
+ORDER BY empty_seats DESC;
+
+SELECT 
+DISTINCT stadium_name, stadium_capacity
+FROM bootcamp.northern_star.matches_flat
+ORDER BY stadium_capacity DESC;
+-- Prve tri utakmice su odigrane na najvecem stadionu (National Stadium).
+
+-- 2. Koliko različitih sudija je sudilo domaće utakmice kluba Riverton Athletic?
+SELECT 
+DISTINCT referee_name
+FROM bootcamp.northern_star.matches_flat
+WHERE home_team = 'Riverton Athletic'
+;
+--15
+-- Moze i sa COUNT:
+SELECT count
+(DISTINCT referee_name)
+FROM bootcamp.northern_star.matches_flat
+WHERE home_team = 'Riverton Athletic'
+;
+
+-- 3. U koliko utakmica je gost vodio na poluvremenu, a domaćin na kraju pobedio?
+
+SELECT * 
+FROM bootcamp.northern_star.matches_flat
+WHERE away_goals_ht > home_goals_ht
+AND home_goals > away_goals
+; 
+--15 utakmica
+
+-- 4. U kojoj utakmici je palo najviše golova u drugom poluvremenu? Ko je igrao, rezultat na poluvremenu i rezultat na kraju?
+
+SELECT
+home_team, away_team, 
+home_goals_ht, away_goals_ht,
+home_goals, away_goals,
+season, kickoff_ts
+FROM bootcamp.northern_star.matches_flat
+ORDER BY ((home_goals+away_goals)-(home_goals_ht+away_goals_ht)) DESC
+LIMIT 1;
+
+-- Northport United vs Newbury Forest: 6:3 (1:0); 26 Oct 2024.
+
+-- 5. Koliko utakmica sezone 2023/24 je odigrano po snegu ili magli?
+
+SELECT count(*)
+FROM bootcamp.northern_star.matches_flat
+WHERE
+season = '2023/24'
+AND weather = 'fog'
+OR weather = 'snow';
+-- 36
+
+-- 6. Prikažite sve utakmice gradskog derbija između Northport United i Northport City, bez obzira na to ko je domaćin, sortirane po datumu. Ko je pobedio u kom meču?
+
+SELECT * 
+FROM bootcamp.northern_star.matches_flat
+WHERE 
+(home_team = 'Northport United'
+OR home_team = 'Northport City')
+AND (away_team = 'Northport City'
+OR away_team = 'Northport United')
+ORDER BY kickoff_ts;
+
+-- 11 Nov 2023: NPC vs NPU 0:1
+-- 16 Mar 2024: NPU vs NPC 0:0
+-- 21 Sep 2024: NPC vs NPU 3:1
+-- 01 Feb 2025: NPU vs NPC 2:1
+
+-- 7. Prikažite prve 3 utakmice sezone 2024/25 po vremenu početka. Da li možete biti sigurni koja je druga, a koja treća? Kako biste to obezbedili?
+SELECT *
+FROM bootcamp.northern_star.matches_flat
+WHERE season = '2024/25'
+ORDER BY kickoff_ts, match_id
+LIMIT 3;
+-- Samo na osnovu vremena pocetka utakmice (kickoff_ts) ne. Mozemo koristiti match_id da ustanovimo bar koja utakmica je ranije upisana u bazu, iako u zavisnosti od nacina upisa/prikupljanja podataka moze ali ne mora znaciti da je ta utakmica zaista i pocela ranije. 
+
+-- 8. Prikažite sve utakmice u kojima je prvi gol dao Sean O'Neill. Koliko ih je?
+
+SELECT *
+FROM bootcamp.northern_star.matches_flat
+WHERE first_goal_scorer = "Sean O'Neill";
+
+-- 2
