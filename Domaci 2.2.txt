@@ -92,8 +92,8 @@ OR first_goal_scorer LIKE '%-%'
 -- 8. Prikažite utakmice sezone `2024/25` koje su počele između 18:00 i 21:00, uključujući obe granice. Prikažite vreme početka i nazive timova.
 
 SELECT
-kickoff_ts,
-home_team, away_team
+home_team, away_team,
+time (kickoff_ts) AS time
 FROM bootcamp.northern_star.matches_flat
 WHERE season = '2024/25'
 AND hour (kickoff_ts) >= 18
