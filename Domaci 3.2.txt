@@ -1,0 +1,181 @@
+-- Osnovni nivo:
+-- 1.Prikažite naziv svakog kluba i naziv stadiona na kojem igra domaće utakmice.
+
+SELECT
+t.team_name, s.stadium_name
+FROM teams t
+INNER JOIN stadiums s ON t.stadium_id = s.stadium_id
+;
+
+
+-- 2.Prikažite ime i prezime igrača i naziv kluba za koji je igrao u sezoni 2024/25. Uklonite duplikate iz rezultata.
+
+SELECT *
+FROM player_match_stats
+;
+
+SELECT
+DISTINCT concat (p.first_name, ' ', p.last_name) player,
+t.team_name
+FROM matches m 
+INNER JOIN player_match_stats s ON m.match_id = s.match_id
+INNER JOIN players p ON s.player_id = p.player_id
+INNER JOIN teams t ON s.team_id = t.team_id
+WHERE season = '2024/25'
+ORDER BY t.team_name, s.rating 
+;
+
+-- Ostavljam i ovo ispod kao kuriozitet, jer u prvom prolazu domaćeg nisam našla player_match_stats tabelu, pa sam pokušala da tražim detalje o angažmanu igrača za određeni klub iz ugovora i pitala sam se kako je ovo lak zadatak :)  
+
+-- SELECT
+--     concat (p.first_name, ' ', p.last_name) player,
+--     t.team_name,
+--     date(c.start_date) contract_start_date, (c.end_date) contract_end_date,
+--     c.contract_type
+-- FROM players p
+-- RIGHT JOIN player_contracts c ON p.player_id = c.player_id
+-- INNER JOIN teams t ON c.team_id = t.team_id
+-- WHERE (c.start_date < '2025-05-18' AND c.end_date IS NULL)
+--     OR (c.start_date < '2025-05-18' AND c.end_date > '2025-05-18')
+-- ORDER BY p.player_id
+-- ;
+
+-- SELECT 
+--     min (kickoff_ts) AS minimum,
+--     max (kickoff_ts) AS maximum
+-- FROM matches
+-- WHERE season = '2024/25'
+-- ; -- Datumi početka i kraja sezone: --2024-08-17T12:30:00.000+00:00	2025-05-18T16:30:00.000+00:00
+
+-- SELECT *
+-- FROM player_contracts
+-- WHERE end_date IS NOT NULL
+-- ORDER BY player_id ;
+-- Analiza pokazuje da postoje transferi između klubova tokom sezone i to dvojaki - pozajmice (loan) i trajni transferi. Ovakvi upisi će dati dva upisa po igraču, s obzirom da su tokom sezon 2024/25 prema ugovorima igrali za dva kluba.
+
+
+-- 3.Prikažite datum odigravanja utakmice, naziv stadiona i broj gledalaca za sve utakmice u sezoni 2024/25.
+
+
+SELECT
+date (m.kickoff_ts) date, s.stadium_name, 
+(CASE WHEN cast (m.attendance AS string) IS NULL THEN 'No data'
+    ELSE cast (m.attendance AS string)
+    END) attendance
+FROM matches m
+INNER JOIN stadiums s ON m.stadium_id = s.stadium_id
+WHERE m.season = '2024/25'
+;
+
+-- Srednji nivo:
+-- 1.Prikažite sve utakmice za koje nije evidentiran broj gledalaca. Prikažite datum, domaći klub i gostujući klub.
+
+SELECT
+    date (m.kickoff_ts) game_date,
+    hmt.team_name home_team,
+    awt.team_name away_team
+FROM matches m
+INNER JOIN teams hmt ON m.home_team_id = hmt.team_id
+INNER JOIN teams awt ON m.away_team_id = awt.team_id
+WHERE m.attendance IS NULL
+;
+
+
+
+-- 2.Pronađite stadione na kojima nije odigrana ni jedna utakmica u sezoni 2024/25.
+
+
+SELECT *
+FROM stadiums s
+LEFT JOIN matches m ON s.stadium_id = m.stadium_id
+WHERE m.season = '2024/25' 
+AND m.match_id is NULL
+;
+
+-- ispravka?
+
+-- 3.Za svaki klub izračunajte ukupan broj žutih kartona koje su dobili njegovi igrači u sezoni 2024/25. Rezultat sortirajte opadajuće prema broju kartona.
+
+SELECT DISTINCT event_type
+FROM match_events
+; -- yellow_card, second_yellow
+
+SELECT 
+count (*) total_yellow_cards,
+t.team_name
+FROM match_events e
+INNER JOIN matches m ON e.match_id = m.match_id
+INNER JOIN teams t ON e.team_id = t.team_id
+WHERE event_type IN ('yellow_card', 'second_yellow') --2640
+AND m.season = '2024/25'--1303
+GROUP BY t.team_name
+ORDER BY total_yellow_cards DESC
+;
+
+-- Napredni nivo:
+-- 1.Pronađite pet igrača sa najvećim brojem asistencija u sezoni 2024/25. Prikažite ime igrača i broj asistencija.
+
+SELECT DISTINCT event_type
+FROM match_events
+;
+
+SELECT *
+FROM match_events
+WHERE related_player_id IS NOT NULL
+;
+
+
+SELECT
+    count (*) assistances,
+    concat (p.first_name, ' ', p.last_name) player
+FROM match_events e
+INNER JOIN players p ON e.related_player_id = p.player_id
+INNER JOIN matches m ON e.match_id = m.match_id 
+WHERE e.event_type = 'goal' -- AND e.related_player_id IS NOT NULL - prvobitno sam stavila ovaj uslov, ali smatram da nije potreban jer sam radila sa INNER JOINom, te se NULLs uopste ne pojavljuju
+AND m.season = '2024/25'
+GROUP BY player
+ORDER BY assistances DESC
+LIMIT 5
+;
+
+
+
+-- 2.Pronađite tri igrača sa najvećim ukupnim brojem odigranih minuta u sezoni 2024/25. Prikažite ime igrača, klub i ukupan broj minuta.
+
+SELECT*
+FROM player_match_stats
+;
+
+
+SELECT
+concat (p.first_name, ' ', p.last_name) player,
+any_value(t.team_name) team,     
+sum (s.minutes_played) total_minutes_played
+FROM matches m
+INNER JOIN player_match_stats s ON m.match_id = s.match_id
+INNER JOIN players p ON s.player_id = p.player_id
+INNER JOIN teams t ON s.team_id = t.team_id
+WHERE m.season = '2024/25'
+GROUP BY player
+ORDER BY total_minutes_played DESC
+LIMIT 3
+;
+
+
+
+-- 3.Za svaku sezonu prikažite broj isključenja po klubovima. Računajte događaje red_card i second_yellow. Uključite samo klubove koji su imali najmanje jedno isključenje.
+ 
+
+
+SELECT
+count (*) red_cards,
+t.team_name,
+m.season
+FROM match_events e
+INNER JOIN teams t ON e.team_id = t.team_id
+INNER JOIN matches m ON e.match_id = m.match_id
+WHERE e.event_type IN ('red_card', 'second_yellow')
+GROUP BY m.season, t.team_name
+HAVING red_cards >= 1
+ORDER BY m.season
+;
