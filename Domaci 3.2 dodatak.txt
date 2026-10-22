@@ -40,3 +40,50 @@ WHERE e.event_type = 'goal'
 GROUP BY e.team_id, t.team_name
 ORDER BY goals DESC
 ;
+
+
+-- Srednji nivo:
+-- 1.Za svaku sezonu prikažite broj golova koje su postigli igrači na pozicijama FW, MF i DF. Rezultat grupišite prema sezoni i poziciji igrača.
+
+SELECT
+ count (*) goals,
+ p.position,
+ m.season
+FROM match_events e
+INNER JOIN players p ON e.player_id = p.player_id 
+INNER JOIN matches m ON e.match_id = m.match_id
+WHERE e.event_type = 'goal'
+AND p.position IN ('FW', 'MF', 'DF')
+GROUP BY m.season, p.position
+ORDER BY m.season 
+;
+
+-- 2.Za svaki stadion prikažite njegov naziv i ukupan broj gledalaca na utakmicama odigranim na njemu. Uključite i stadione za koje nema evidentiranih utakmica. 
+
+
+
+SELECT
+    s.stadium_name, 
+    sum (m.attendance) total_attendance
+FROM stadiums s
+LEFT JOIN matches m ON s.stadium_id = m.stadium_id
+GROUP BY s.stadium_name
+ORDER BY total_attendance DESC
+;
+
+
+-- 3.Za svakog sudiju prikažite broj različitih utakmica u kojima je dosuđen penal, bez obzira na to da li je penal realizovan. Uključite i sudije za koje nema takvih utakmica.
+
+SELECT DISTINCT event_type 
+FROM match_events; --penalty_miss, penalty_goal
+
+
+SELECT
+    count (distinct e.match_id) penalty_matches, 
+    r.referee_id, r.referee_name
+FROM referees r 
+LEFT JOIN matches m on r.referee_id = m.referee_id
+LEFT JOIN match_events e ON m.match_id = e.match_id
+    AND e.event_type IN ('penalty_miss', 'penalty_goal')
+GROUP BY r.referee_id, r.referee_name
+ORDER BY penalty_matches DESC;
