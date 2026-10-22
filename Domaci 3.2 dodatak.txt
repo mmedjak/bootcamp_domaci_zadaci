@@ -1,0 +1,42 @@
+-- Osnovni nivo:
+-- 1.Za svakog sudiju prikažite njegovo ime i broj utakmica koje je sudio. Uključite i sudije koje nisu sudile ni jednu utakmicu.
+
+SELECT
+    r.referee_id,
+    r.referee_name
+FROM referees r
+LEFT JOIN matches m ON r.referee_id = m.referee_id
+WHERE m.match_id IS NULL;
+
+SELECT 
+    r.referee_id, r.referee_name,
+    count (m.match_id)        
+FROM referees r
+LEFT JOIN matches m ON r.referee_id = m.referee_id
+GROUP BY r.referee_id, r.referee_name
+;
+
+
+
+-- 2.Prikažite imena i prezimena igrača koji nemaju ni jedan zapis u tabeli player_match_stats.
+
+SELECT
+    p.first_name, p.last_name
+FROM players p
+LEFT JOIN player_match_stats s ON p.player_id = s.player_id
+WHERE match_id IS NULL; 
+
+-- 3.Prikažite broj golova koji je svaki klub postigao kao domaćin u sezoni 2024/25. Rezultat sortirajte od najvećeg ka najmanjem broju golova.
+
+SELECT 
+    count (*) goals,
+    e.team_id,
+    t.team_name
+FROM matches m
+INNER JOIN match_events e ON m.match_id = e.match_id
+INNER JOIN teams t ON e.team_id = t.team_id 
+WHERE e.event_type = 'goal'
+    AND m.season = '2024/25'
+GROUP BY e.team_id, t.team_name
+ORDER BY goals DESC
+;
