@@ -1,0 +1,180 @@
+-- 1. Koliko redova ima spoj matches i player_match_stats za sezonu 2024/25? Objasnite.
+
+SELECT count (*)
+FROM matches
+WHERE season = '2024/25'; -- 380
+
+SELECT *
+FROM matches m
+JOIN player_match_stats ms ON ms.match_id = m.match_id
+WHERE season = '2024/25'
+; -- 15200 
+
+SELECT 15200 / 380; -- 40
+
+--Spoj matches i player_match_stats za sezonu 2024/25 ima 15.200 redova, što je 40 puta više u odnosu na matches tabelu u kojoj je za sezonu 2024/25 ukupno 380 utakmica odnosno redova. Za svaku utakmicu iz matches tabele, redovi su umnoženi tako što postoji po red za svakog igrača iz oba tima (prosečno 40 igrača po utakmici).
+
+-- 2. Koliko puta je igrač u istoj sezoni igrao za dva različita kluba? 
+
+
+-- CTE upit za jednu sezonu (multiple_teams)
+SELECT 
+    count (distinct ms.team_id) teams_in_season, 
+    ms.player_id, 
+    m.season
+FROM player_match_stats ms
+JOIN matches m 
+    ON m.match_id = ms.match_id
+WHERE minutes_played > 0
+GROUP BY player_id, m.season
+HAVING count (distinct team_id) > 1
+;
+
+
+-- ukupan upit (sa CTE) 
+
+WITH multiple_teams AS (
+            SELECT 
+                count (distinct ms.team_id) AS teams_in_season, 
+                ms.player_id, 
+                m.season
+            FROM player_match_stats ms
+            JOIN matches m 
+                ON m.match_id = ms.match_id
+            WHERE minutes_played > 0
+            GROUP BY player_id, m.season
+            HAVING count (distinct team_id) > 1
+)
+SELECT season, 
+        count (player_id)
+FROM multiple_teams mt
+GROUP BY season
+;
+
+
+
+-- 3. Koliko utakmica ima više kartona od prosečne utakmice? Bez kartona računajte sa 0.
+
+-- CTE za broj kartona u utakmici
+SELECT 
+    match_id,
+    sum (CASE
+            WHEN event_type IN ('yellow_card', 'second_yelllow', 'red_card') THEN 1
+            ELSE 0
+        END) AS cards 
+FROM match_events
+GROUP BY match_id
+;
+
+
+-- avg kartona za sve utakmice 
+WITH cards AS (
+                SELECT 
+                    match_id,
+                    sum (CASE
+                            WHEN event_type IN ('yellow_card', 'second_yelllow', 'red_card') THEN 1
+                            ELSE 0
+                        END) AS cards_per_match 
+                FROM match_events
+                GROUP BY match_id
+)
+SELECT 
+    avg (cards.cards_per_match)
+FROM cards
+; --3.45
+
+-- utakmice u kojima je cards_per_match veci od avg (avg je podupit)
+
+WITH cards AS (
+                SELECT 
+                    match_id,
+                    sum (CASE
+                            WHEN event_type IN ('yellow_card', 'second_yelllow', 'red_card') THEN 1
+                            ELSE 0
+                        END) AS cards_per_match 
+                FROM match_events
+                GROUP BY match_id
+)
+SELECT count (match_id)
+FROM cards
+WHERE cards_per_match > (SELECT 
+                            avg (cards.cards_per_match)
+                            FROM cards)
+; 
+
+--355 utakmica ima vise kartona od proseka
+
+
+
+-- 4. Koliko igrača je odigralo više od 10 utakmica u sezoni 2024/25?
+
+-- count (?), where season = '2024/25', minutes_played > 0, distinct matches > 10
+
+
+SELECT 
+    count (DISTINCT ms.match_id) AS played_matches,
+    ms.player_id
+FROM player_match_stats ms
+JOIN matches m ON m.match_id = ms.match_id
+WHERE m.season = '2024/25'                               
+    AND minutes_played > 0 -- 564
+GROUP BY player_id
+HAVING played_matches > 10
+
+; -- Ovako je dobijena tabela sa svim igracima koji su odigrali vise od 10 utakmica u sezoni 2024/25 u kojoj je 383 reda, sto je odgovor na pitanje. Da bi se dobio bas broj takvih igraca ovo moze da se iskoristi kao CTE:
+
+WITH players_over10_matches AS (
+                        SELECT 
+                            count (DISTINCT ms.match_id) AS played_matches,
+                            ms.player_id
+                        FROM player_match_stats ms
+                        JOIN matches m ON m.match_id = ms.match_id
+                        WHERE m.season = '2024/25'                             
+                            AND minutes_played > 0 
+                        GROUP BY player_id
+                        HAVING played_matches > 10 
+)
+SELECT count (*) 
+FROM players_over10_matches;
+
+
+-- 5. Prikažite sve klubove koji su igrali u sezoni 2024/25, bilo kao domaćini ili kao gosti. Koristite UNION, a zatim izmenite upit tako da koristi UNION ALL. Objasnite razliku u broju redova koji dobijate.
+
+-- domacini:
+
+SELECT 
+    DISTINCT t.team_name
+FROM matches m
+JOIN teams t ON team_id = m.home_team_id
+WHERE m.season = '2024/25' -- 20
+
+UNION 
+
+-- gosti
+SELECT 
+    DISTINCT t.team_name
+FROM matches m
+JOIN teams t ON team_id = m.away_team_id
+WHERE m.season = '2024/25' -- 
+;
+
+-- Union vraca ukupno 20 timova, jer uklanja duplikate.
+
+
+SELECT 
+    DISTINCT t.team_name
+FROM matches m
+JOIN teams t ON team_id = m.home_team_id
+WHERE m.season = '2024/25' -- 20
+
+UNION ALL 
+
+-- gosti
+SELECT 
+    DISTINCT t.team_name
+FROM matches m
+JOIN teams t ON team_id = m.away_team_id
+WHERE m.season = '2024/25' -- 
+;
+
+-- UNION ALL vraca ukupno 40 redova odnosno timova jerje svaki tim predstavljen dva puta, jednom kao domacin, a jednom kao gost, jer UNION ALL zbira sve redove ukljucenih upita.
