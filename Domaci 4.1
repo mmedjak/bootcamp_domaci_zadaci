@@ -72,7 +72,7 @@ WITH cards AS (
                 SELECT 
                     match_id,
                     sum (CASE
-                            WHEN event_type IN ('yellow_card', 'second_yelllow', 'red_card') THEN 1
+                            WHEN event_type IN ('yellow_card', 'second_yellow', 'red_card') THEN 1
                             ELSE 0
                         END) AS cards_per_match 
                 FROM match_events
@@ -89,7 +89,7 @@ WITH cards AS (
                 SELECT 
                     match_id,
                     sum (CASE
-                            WHEN event_type IN ('yellow_card', 'second_yelllow', 'red_card') THEN 1
+                            WHEN event_type IN ('yellow_card', 'second_yellow', 'red_card') THEN 1
                             ELSE 0
                         END) AS cards_per_match 
                 FROM match_events
