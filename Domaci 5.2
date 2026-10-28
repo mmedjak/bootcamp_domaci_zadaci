@@ -1,0 +1,114 @@
+-- 1. Prosek datih golova u poslednjih 5 utakmica, uz izričit okvir prozora. Koja je najveća vrednost? Računajte samo kada prozor zaista ima 5 utakmica.
+
+-- cte za poredak utakmica; case when da se ne racuna gde rn nije >5, ovde se prikazuju 0 ako nema dovoljno utakmica za racunanje proseka
+
+WITH numbered_matches AS
+    (SELECT 
+           match_id, kickoff_ts, 
+           home_team_id, away_team_id,
+           home_goals, away_goals,
+           home_goals + away_goals AS total_goals,
+           ROW_NUMBER() OVER (ORDER BY kickoff_ts) AS rn
+    FROM matches)
+
+SELECT 
+    match_id, kickoff_ts, 
+    home_team_id, away_team_id,
+    home_goals, away_goals,
+    total_goals, rn,
+    CASE 
+        WHEN rn<= 5 THEN 0
+        ELSE round (avg (home_goals + away_goals) OVER (ORDER BY kickoff_ts ROWS BETWEEN 5 PRECEDING AND 1 PRECEDING), 2)
+    END AS previous_avg
+    FROM numbered_matches
+    ;
+
+-- ovde se u case when dodaje poruka da nema podataka ako je manje od 5 prethodnih utakmica. po meni je ovakav pristup bolji za predstavljanje rezultata, ali ako je previous_avg potreban kao numericka vrednost za dalje racunanje, onda bolje da se predstavlja sa 0 kao iznad. 
+
+WITH numbered_matches AS
+    (SELECT 
+           match_id, kickoff_ts, 
+           home_team_id, away_team_id,
+           home_goals, away_goals,
+           home_goals + away_goals AS total_goals,
+           ROW_NUMBER() OVER (ORDER BY kickoff_ts) AS rn
+    FROM matches)
+
+SELECT 
+    match_id, kickoff_ts, 
+    home_team_id, away_team_id,
+    home_goals, away_goals,
+    total_goals, rn,
+    CASE 
+        WHEN rn<= 5 THEN 'nema podataka'
+        ELSE cast (avg (home_goals + away_goals) OVER (ORDER BY kickoff_ts ROWS BETWEEN 5 PRECEDING AND 1 PRECEDING) AS string)
+    END AS previous_avg
+    FROM numbered_matches
+    ;
+
+-- 2. Tekući zbir datih golova svakog kluba u sezoni 2024/25: ko je prvi stigao do 50 golova i kada?
+
+
+WITH running_sum AS
+(       SELECT
+            match_id,
+            kickoff_ts,
+            team_id,
+            goals_for,
+            sum (goals_for) OVER (PARTITION BY team_id ORDER BY kickoff_ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running_sum,
+            ROW_NUMBER() OVER (PARTITION BY team_id ORDER BY kickoff_ts) AS rn
+        FROM team_matches
+        WHERE season = '2024/25'
+)
+SELECT
+    rs.match_id,
+    rs.kickoff_ts,
+    rs.team_id,
+    t.team_name,
+    rs.goals_for,
+    rs.running_sum,
+    rs.rn
+FROM running_sum rs
+JOIN teams t ON t.team_id = rs.team_id
+WHERE rs.running_sum = 50
+ORDER BY rs.kickoff_ts
+;
+
+-- Northport United je prvi stigao do 50. gola na utakmici odigranoj 15.2.2025.
+
+-- 3. Za svaku domaću utakmicu izračunajte promenu posećenosti u odnosu na prethodnu domaću utakmicu istog kluba u istoj sezoni. Gde je najveći pad i zašto?
+
+-- CTE previous attendance
+SELECT
+    m.season, m.match_id, m.kickoff_ts, m.home_team_id, 
+    coalesce (m.attendance, 0),
+    coalesce (LAG (m.attendance) OVER (PARTITION BY m.season, m.home_team_id ORDER BY kickoff_ts), 0) AS previous_attendance
+FROM matches m
+;
+
+
+-- razlika u poseti
+WITH previous_attendance AS
+    (SELECT
+        m.season, m.match_id, m.kickoff_ts, m.home_team_id, 
+        coalesce (m.attendance, 0) AS attendance,
+        coalesce (LAG (m.attendance) OVER (PARTITION BY m.season, m.home_team_id ORDER BY kickoff_ts), 0) AS previous_attendance
+    FROM matches m
+    )
+SELECT
+    pa.season, pa.match_id, pa.kickoff_ts, pa.home_team_id, 
+    pa.attendance,
+    pa.previous_attendance,
+    t.team_name,
+    attendance - previous_attendance AS attendance_diff
+FROM previous_attendance pa
+JOIN teams t ON t.team_id = pa.home_team_id
+ORDER BY attendance_diff
+;
+
+
+SELECT count (*) FROM matches
+WHERE attendance is NULL
+    OR attendance =  0; -- 18 utakmica
+
+-- Najveci pad broja gleadalaca se belezi kod utakmica na kojima nije bilo publike (0) ili poseta nije zabelezena (null). 
