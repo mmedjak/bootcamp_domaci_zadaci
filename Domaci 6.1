@@ -1,0 +1,136 @@
+-- 1. Kreiranje dimenzije igrača
+-- Na osnovu tabele players napravite tabelu dim_player koja sadrži sledeće kolone: player_id, ime, prezime, poziciju i nacionalnost igrača.
+-- Koliko redova ima novokreirana tabela?
+
+CREATE OR REPLACE TABLE players_copy AS 
+SELECT * FROM bootcamp.northern_star.players;
+
+CREATE OR REPLACE TABLE dim_player AS 
+SELECT 
+    player_id,
+    first_name,
+    last_name,
+    position,
+    nationality
+FROM players_copy;
+
+SELECT count (*) FROM dim_player; --681
+--Novokreirana tabela dim_player ima 681 red, koliko je imala i tabela iz koje je napravljena (players_copy).
+
+-- 2. Kreiranje dimenzije datuma i činjenične tabele
+-- Napravite tabelu dim_date na isti način kao na predavanju. Zatim napravite tabelu fact_player_match na osnovu tabela player_match_stats i matches. Tabela treba da sadrži sledeće kolone: match_id, date_key, player_id, team_id, minutes_played, shots, passes i rating.
+
+-- U tabelu uključite samo podatke koji se odnose na odigrane utakmice.
+-- Kolika je granularnost tabele fact_player_match, odnosno šta predstavlja jedan njen red?
+-- Koliko redova ima ova tabela?
+
+CREATE OR REPLACE TABLE dim_date AS 
+SELECT 
+    CAST(DATE_FORMAT(d, 'yyyyMMdd') AS INT) AS date_key, 
+    d AS full_date,
+    DATE_FORMAT(d, 'EEEE') AS weekday_name, 
+    DAYOFWEEK(d) IN (1, 7) AS is_weekend, 
+    CASE 
+        WHEN MONTH(d) >= 7 THEN CONCAT(YEAR(d), '/', SUBSTRING(CAST(YEAR(d) + 1 AS STRING), 3, 2)) 
+        ELSE CONCAT(YEAR(d) - 1, '/', SUBSTRING(CAST(YEAR(d) AS STRING), 3, 2)) 
+        END AS season 
+    FROM (SELECT EXPLODE(SEQUENCE(DATE'2023-07-01', DATE'2025-06-30', INTERVAL 1 DAY)) AS d);
+
+-- Dodate kopije tabela player_match_stats i matches u sandbox shemu
+
+CREATE OR REPLACE TABLE player_match_stats_copy AS 
+SELECT * FROM bootcamp.northern_star.player_match_stats;
+
+CREATE OR REPLACE TABLE matches_copy AS 
+SELECT * FROM bootcamp.northern_star.matches;
+
+
+CREATE OR REPLACE TABLE fact_player_match AS
+SELECT 
+    msc.match_id, 
+    CAST(DATE_FORMAT(mc.kickoff_ts, 'yyyyMMdd') AS INT) AS date_key, 
+    msc.player_id, 
+    msc.team_id, 
+    msc.minutes_played, 
+    msc.shots, 
+    msc.passes, 
+    msc.rating
+FROM player_match_stats_copy msc
+JOIN matches_copy mc ON mc.match_id = msc.match_id
+WHERE mc.status = 'played'
+;
+
+SELECT count(*) FROM fact_player_match; -- 30400
+
+-- Jedan red u tabeli fact_player_match daje podatke o jednom igraču na jednoj utakmici, tako da za svaku (odigranu) utakmicu ima po red za svakog igrača iz oba tima (40 redova), što je ukupno 30 400 redova.
+
+-- 3. Prosečna ocena igrača po poziciji
+-- Koristeći napravljene dimenzije i činjeničnu tabelu, izračunajte prosečnu ocenu (rating) igrača za svaku poziciju tokom sezone 2024/25. Prikažite poziciju i odgovarajuću prosečnu ocenu.
+
+
+SELECT 
+    dp.position,
+    round (avg (fpm.rating), 2) AS avg_rating
+FROM fact_player_match fpm
+JOIN dim_date dd ON dd.date_key = fpm.date_key
+JOIN dim_player dp ON dp.player_id = fpm.player_id
+WHERE dd.season = '2024/25'
+   -- AND fpm.minutes_played > 0
+    AND fpm.rating <> 'nan' -- iskljucene su nepoznate vrednosti za rejting, prvo sam pokusala to da resim ukljucujuci samo igrace koji su igrali, ali i za igrace koji su igrali postoje nepoznate vrednosti za rejting
+GROUP BY dp.position
+ORDER BY avg_rating DESC
+;
+
+-- 4. Dodavanje broja golova u činjeničnu tabelu
+-- Proširite tabelu fact_player_match dodavanjem kolone koja predstavlja broj golova koje je svaki igrač postigao na određenoj utakmici.
+-- Koliki je ukupan zbir golova svih igrača u tabeli fact_player_match?
+
+CREATE OR REPLACE TABLE match_events_copy AS 
+SELECT * FROM bootcamp.northern_star.match_events;
+
+--dodata prazna kolona goals_scored 
+ALTER TABLE fact_player_match ADD COLUMN (goals_scored INT);
+
+-- upit za broj golova po igracu po utakmici (ukljucuje i igrace koji nisu postigli nijedan gola na utakmici)
+-- autogolovi nisu uuzeti u obzir
+SELECT
+    fpm.match_id,
+    fpm.player_id,
+    sum (CASE 
+            WHEN ec.event_type IN ('goal', 'penalty_goal') THEN 1
+            ELSE 0
+        END) AS goals_count
+FROM fact_player_match fpm
+LEFT JOIN match_events_copy ec ON ec.match_id = fpm.match_id 
+                            AND ec.player_id = fpm.player_id
+GROUP BY fpm.match_id, fpm.player_id
+;
+
+SELECT 
+    fpm.match_id,
+    fpm.player_id,
+    count (ec.event_type) AS goals_scored
+FROM fact_player_match fpm
+LEFT JOIN match_events_copy ec ON ec.match_id = fpm.match_id
+                            AND ec.player_id = fpm.player_id
+                            AND ec.event_type IN ('goal', 'penalty_goal')
+GROUP BY fpm.match_id, fpm.player_id;
+    
+UPDATE fact_player_match fpm
+SET goals_scored = (SELECT 
+                        count (ec.event_type)
+                    FROM match_events_copy ec 
+                    WHERE ec.match_id = fpm.match_id
+                        AND ec.player_id = fpm.player_id
+                        AND ec.event_type IN ('goal', 'penalty_goal')
+);
+
+SELECT sum (goals_scored)
+from fact_player_match; --2043
+
+SELECT count(event_type)
+FROM bootcamp.northern_star.match_events
+WHERE event_type IN ('goal', 'penalty_goal'); --2043
+
+-- Ukupan zbir golova svih igrača u tabeli fact_player_match iznosi 2043 i jednak je zbriru svih događaja vrste gol, gol iz penala iz prvobitne tabele match_events.
+
