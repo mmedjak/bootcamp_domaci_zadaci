@@ -124,3 +124,21 @@ def write_rows(path: str, rows: list) -> None:
     
     with open(path, 'w') as f:
         writer = csv.writer(f).writerows(rows)
+
+
+# 23. Написати функцију write_dicts(path: str, rows: list) -> None која листу речника уписује у
+# CSV фајл
+# Користити csv.DictWriter; заглавља су кључеви првог речника
+# Input: 'data/processed/people.csv', [{'name': 'Ana', 'age': 20}, {'name': 'Marko', 'age': 22}]
+# Садржај фајла након позива:
+    # name,age
+    # Ana,20
+    # Marko,22
+
+def write_dicts(path: str, rows: list) -> None:
+    headings = list(rows[0].keys())
+    
+    with open(path, 'w') as f:
+        writer = csv.DictWriter(f, fieldnames=headings)
+        writer.writeheader()
+        writer.writerows(rows)
